@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SculptGL 3D</string>
+    <string name="tool_brush">Brush</string>
+    <string name="tool_inflate">Inflate</string>
+    <string name="tool_twist">Twist</string>
+    <string name="tool_smooth">Smooth</string>
+    <string name="tool_flatten">Flatten</string>
+    <string name="tool_pinch">Pinch</string>
+    <string name="tool_crease">Crease</string>
+    <string name="tool_drag">Drag</string>
+    <string name="tool_paint">Paint</string>
+    <string name="tool_move">Move</string>
+    <string name="tool_mask">Mask</string>
+    <string name="tool_transform">Transform</string>
+</resources>

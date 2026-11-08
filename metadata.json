@@ -1,0 +1,8 @@
+{
+  "name": "SculptGL 3D",
+  "description": "3D digital sculpting studio with real-time mesh deformation, clay tools, matcaps, symmetry, and OBJ/STL export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
