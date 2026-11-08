@@ -74,7 +74,11 @@ class SculptGLViewModel(application: Application) : AndroidViewModel(application
     fun selectTool(tool: SculptTool) {
         engine.currentTool = tool
         _uiState.value = _uiState.value.copy(currentTool = tool)
-        val msg = if (tool == SculptTool.PLANAR) "Planar Brush: Creates crisp flat facets" else "${tool.displayName} selected"
+        val msg = if (tool == SculptTool.PLANAR) {
+            "Planar Brush: Sculpt flat facets"
+        } else {
+            "${tool.displayName} selected"
+        }
         showToast(msg)
     }
 
@@ -95,7 +99,12 @@ class SculptGLViewModel(application: Application) : AndroidViewModel(application
         val next = !engine.isNegative
         engine.isNegative = next
         _uiState.value = _uiState.value.copy(isNegative = next)
-        showToast(if (next) "Sub / Carve mode" else "Add / Build mode")
+        val msg = if (engine.currentTool == SculptTool.PLANAR) {
+            if (next) "Planar: Trim / Subtract mode (-)" else "Planar: Build / Add mode (+)"
+        } else {
+            if (next) "Sub / Carve mode (-)" else "Add / Build mode (+)"
+        }
+        showToast(msg)
     }
 
     fun toggleSymmetry() {

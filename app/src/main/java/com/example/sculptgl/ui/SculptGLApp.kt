@@ -122,6 +122,9 @@ fun SculptGLApp(viewModel: SculptGLViewModel) {
                 val r = viewModel.initRenderer(ctx)
                 SculptGLSurfaceView(ctx, viewModel, r)
             },
+            onRelease = { view ->
+                view.onPause()
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("sculpt_canvas")
@@ -377,32 +380,48 @@ fun SculptGLApp(viewModel: SculptGLViewModel) {
             border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                // Tool Name + Add/Sub toggle
+                // Tool Name + Mode subtitle + Add/Sub toggle
+                val isPlanar = uiState.currentTool == SculptTool.PLANAR
+                val isRemoving = uiState.isNegative
+                val modeColor = if (isRemoving) Color(0xFFEF4444) else PrimaryClay
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = uiState.currentTool.displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryClayLight
-                    )
+                    Column {
+                        Text(
+                            text = uiState.currentTool.displayName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryClayLight
+                        )
+                        Text(
+                            text = if (isPlanar) {
+                                if (isRemoving) "Trim (-)" else "Build (+)"
+                            } else {
+                                if (isRemoving) "Carve (-)" else "Build (+)"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = modeColor
+                        )
+                    }
 
                     // Add / Sub Toggle button
                     FilledIconButton(
                         onClick = { viewModel.toggleNegative() },
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (uiState.isNegative) Color(0xFFEF4444) else PrimaryClay
+                            containerColor = modeColor
                         ),
                         modifier = Modifier
                             .size(28.dp)
                             .testTag("sub_add_toggle")
                     ) {
                         Icon(
-                            imageVector = if (uiState.isNegative) Icons.Default.Remove else Icons.Default.Add,
-                            contentDescription = if (uiState.isNegative) "Carve Mode" else "Build Mode",
+                            imageVector = if (isRemoving) Icons.Default.Remove else Icons.Default.Add,
+                            contentDescription = if (isRemoving) "Subtract Mode" else "Add Mode",
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -462,6 +481,15 @@ fun SculptGLApp(viewModel: SculptGLViewModel) {
                     style = MaterialTheme.typography.labelSmall,
                     color = TextMuted
                 )
+                if (uiState.currentTool == SculptTool.PLANAR) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "📐 Planar: Locks plane to sculpt flat facets",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PrimaryClayLight,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
 

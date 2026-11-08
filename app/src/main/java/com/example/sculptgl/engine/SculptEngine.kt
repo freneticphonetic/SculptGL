@@ -21,26 +21,68 @@ class SculptEngine {
     // Planar brush plane cache
     private var planarOrigin = Vec3()
     private var planarNormal = Vec3()
+    private var planarCutPoint = Vec3()
 
-    fun beginStroke(hit: HitResult) {
+    /**
+     * Planar Brush Reference Plane:
+     * When you touch the mesh, sample the surrounding geometry within the brush radius
+     * to calculate the reference average plane with position and orientation in 3D space.
+     * Subtract (-) mode cuts a plane INTO the material by depth.
+     * Add (+) mode builds a flat plateau plane OUTWARD from the material by depth.
+     * The orientation is locked for the entire stroke.
+     */
+    fun beginStroke(mesh: SculptMesh, hit: HitResult) {
+        val radSq = radius * radius
+        val vertices = mesh.vertices
+        val normals = mesh.normals
+        val vertexCount = mesh.vertexCount
+
+        var avgNx = 0f; var avgNy = 0f; var avgNz = 0f
+        var count = 0
+
+        for (i in 0 until vertexCount) {
+            val dx = vertices[i * 3] - hit.point.x
+            val dy = vertices[i * 3 + 1] - hit.point.y
+            val dz = vertices[i * 3 + 2] - hit.point.z
+            if (dx * dx + dy * dy + dz * dz < radSq) {
+                avgNx += normals[i * 3]
+                avgNy += normals[i * 3 + 1]
+                avgNz += normals[i * 3 + 2]
+                count++
+            }
+        }
+
+        if (count > 0) {
+            val nLen = sqrt(avgNx * avgNx + avgNy * avgNy + avgNz * avgNz)
+            if (nLen > 1e-5f) {
+                planarNormal.set(avgNx / nLen, avgNy / nLen, avgNz / nLen)
+            } else {
+                planarNormal.set(hit.normal).normalize()
+            }
+        } else {
+            planarNormal.set(hit.normal).normalize()
+        }
+
+        if (planarNormal.dot(hit.normal) < 0f) {
+            planarNormal.set(-planarNormal.x, -planarNormal.y, -planarNormal.z)
+        }
         planarOrigin.set(hit.point)
-        planarNormal.set(hit.normal)
     }
 
     /**
      * Applies sculpting deformation at hit location.
      */
     fun sculpt(mesh: SculptMesh, hit: HitResult, screenDragDelta: Vec3? = null) {
-        applyTool(mesh, hit.point, hit.normal, screenDragDelta)
+        applyTool(mesh, hit.point, hit.normal, screenDragDelta, isSymmetric = false)
         if (symmetryX) {
             val symPoint = Vec3(-hit.point.x, hit.point.y, hit.point.z)
             val symNormal = Vec3(-hit.normal.x, hit.normal.y, hit.normal.z)
             val symDrag = screenDragDelta?.let { Vec3(-it.x, it.y, it.z) }
-            applyTool(mesh, symPoint, symNormal, symDrag)
+            applyTool(mesh, symPoint, symNormal, symDrag, isSymmetric = true)
         }
     }
 
-    private fun applyTool(mesh: SculptMesh, center: Vec3, normal: Vec3, dragDelta: Vec3?) {
+    private fun applyTool(mesh: SculptMesh, center: Vec3, normal: Vec3, dragDelta: Vec3?, isSymmetric: Boolean = false) {
         val radSq = radius * radius
         val dirSign = if (isNegative) -1f else 1f
         val vertices = mesh.vertices
@@ -84,30 +126,58 @@ class SculptEngine {
             }
 
             SculptTool.PLANAR -> {
-                // Planar Brush: projects vertices onto cutting plane defined by stroke origin & normal
-                // Creates crisp architectural, chiseled, hard-surface flat facets!
-                for (idx in affectedVertices) {
-                    val falloff = computeFalloff(mesh, idx, center, radSq)
-                    if (falloff <= 0f) continue
+                // Nomad Sculpt Planar Brush:
+                // 1. Locked plane normal (orientation) established at stroke start.
+                // 2. Each dab evaluates local surface height under the brush along the locked normal,
+                //    progressively ironing out grooves and ridges into a broad, continuous angled planar surface.
+                val activeNorm = if (isSymmetric) Vec3(-planarNormal.x, planarNormal.y, planarNormal.z) else planarNormal
 
+                // Calculate local average position of vertices under the brush
+                var avgPx = 0f; var avgPy = 0f; var avgPz = 0f
+                for (idx in affectedVertices) {
+                    avgPx += vertices[idx * 3]
+                    avgPy += vertices[idx * 3 + 1]
+                    avgPz += vertices[idx * 3 + 2]
+                }
+                val invCount = 1f / affectedVertices.size
+                avgPx *= invCount; avgPy *= invCount; avgPz *= invCount
+
+                val depth = radius * 0.12f * intensity
+                val pCutX = if (isNegative) avgPx - activeNorm.x * depth else avgPx + activeNorm.x * depth
+                val pCutY = if (isNegative) avgPy - activeNorm.y * depth else avgPy + activeNorm.y * depth
+                val pCutZ = if (isNegative) avgPz - activeNorm.z * depth else avgPz + activeNorm.z * depth
+
+                for (idx in affectedVertices) {
                     val vx = vertices[idx * 3]
                     val vy = vertices[idx * 3 + 1]
                     val vz = vertices[idx * 3 + 2]
 
-                    // Distance from vertex to plane
-                    val d = (vx - planarOrigin.x) * planarNormal.x +
-                            (vy - planarOrigin.y) * planarNormal.y +
-                            (vz - planarOrigin.z) * planarNormal.z
+                    // Distance along the locked normal to the dab plane:
+                    val d = (vx - pCutX) * activeNorm.x +
+                            (vy - pCutY) * activeNorm.y +
+                            (vz - pCutZ) * activeNorm.z
 
-                    // Depending on negative mode:
-                    // positive mode flattens points above plane; negative flattens points below plane
-                    val shouldFlatten = if (!isNegative) d > 0f else d < 0f
-                    if (shouldFlatten || isNegative) {
-                        val factor = falloff * intensity * 0.75f
-                        vertices[idx * 3] -= planarNormal.x * d * factor
-                        vertices[idx * 3 + 1] -= planarNormal.y * d * factor
-                        vertices[idx * 3 + 2] -= planarNormal.z * d * factor
+                    val dx = vx - center.x
+                    val dy = vy - center.y
+                    val dz = vz - center.z
+                    val distSq = dx * dx + dy * dy + dz * dz
+
+                    val r = sqrt(distSq / radSq)
+                    val falloff = (1f - r * r).coerceIn(0f, 1f)
+                    val maskVal = mesh.masks?.get(idx) ?: 0f
+                    val factor = (falloff * intensity * 0.9f * (1f - maskVal)).coerceIn(0f, 1f)
+
+                    val shift = if (isNegative) {
+                        // Trim: push high material above the dab plane inward
+                        if (d > 0f) d * factor else 0f
+                    } else {
+                        // Build: pull low material below the dab plane outward
+                        if (d < 0f) d * factor else 0f
                     }
+
+                    vertices[idx * 3] -= activeNorm.x * shift
+                    vertices[idx * 3 + 1] -= activeNorm.y * shift
+                    vertices[idx * 3 + 2] -= activeNorm.z * shift
                 }
             }
 

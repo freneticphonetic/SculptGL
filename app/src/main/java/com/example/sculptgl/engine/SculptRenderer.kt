@@ -126,11 +126,12 @@ class SculptRenderer(private val context: Context) : GLSurfaceView.Renderer {
         }
 
         // Draw brush cursor ring
-        if (showCursor && currentHit != null) {
-            drawCursor(currentHit!!.point, currentHit!!.normal)
+        val hit = currentHit
+        if (showCursor && hit != null) {
+            drawCursor(hit.point, hit.normal)
             if (symmetryX) {
-                val symPt = Vec3(-currentHit!!.point.x, currentHit!!.point.y, currentHit!!.point.z)
-                val symNorm = Vec3(-currentHit!!.normal.x, currentHit!!.normal.y, currentHit!!.normal.z)
+                val symPt = Vec3(-hit.point.x, hit.point.y, hit.point.z)
+                val symNorm = Vec3(-hit.normal.x, hit.normal.y, hit.normal.z)
                 drawCursor(symPt, symNorm)
             }
         }
